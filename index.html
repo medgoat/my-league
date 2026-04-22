@@ -334,19 +334,19 @@ function renderFixtures(){
 function renderAll(){renderStandings();renderResults();renderFixtures();}
 
 // 5. ATTACH TO WINDOW (Required because this is a "module" script)
-window.updateScore = (idx, field, val) => {
+window.updateScore = (idx, field, val) => { ... };
   const p = val === '' ? null : parseInt(val);
   fixtures[idx][field] = isNaN(p) ? null : p;
   saveData();
 };
-window.setRound = (r) => { activeRound = r; renderFixtures(); };
-window.switchTab = (name, btn) => {
+window.setRound = (r) => { ... };
+window.switchTab = (name, btn) => { ... };
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
   btn.classList.add('active');
 };
-window.resetAll = () => {
+window.resetAll = () => { ... };
   if (!confirm('Reset all results?')) return;
   fixtures = JSON.parse(JSON.stringify(INITIAL_FIXTURES));
   saveData();
