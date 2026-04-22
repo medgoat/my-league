@@ -134,13 +134,32 @@
 </div>
 
 <script>
-const TEAMS = ["AC ZEWITA","CASANEGRA","EAGLES","T600","TELABA FC","THE OG'S"];
-const TEAM_COLORS = {
-  "AC ZEWITA":"#00b4d8","CASANEGRA":"#e63946","EAGLES":"#f4d03f",
-  "T600":"#a8dadc","TELABA FC":"#06d6a0","THE OG'S":"#ff9f1c"
+ 
+<script type="module">
+// 1. IMPORT FIREBASE LIBRARIES
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+// 2. PASTE YOUR CONFIG HERE
+const firebaseConfig = {
+  apiKey: "AIzaSyBI8uhhkdTFMcx8RS4gCsSxS3Fa7DzPzV4",
+  authDomain: "league-e398e.firebaseapp.com",
+  projectId: "league-e398e",
+  storageBucket: "league-e398e.firebasestorage.app",
+  messagingSenderId: "919265771771",
+  appId: "1:919265771771:web:cabc8b9737c823f03eb05e",
+  measurementId: "G-CWLL7P4EVT"
 };
-const STORAGE_KEY = "league-fixtures-v1";
-const INITIAL = [
+
+// 3. INITIALIZE FIREBASE
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const leagueRef = ref(db, 'league_data');
+
+// --- YOUR ORIGINAL TEAM DATA ---
+const TEAMS = ["AC ZEWITA","CASANEGRA","EAGLES","T600","TELABA FC","THE OG'S"];
+const TEAM_COLORS = {"AC ZEWITA":"#00b4d8","CASANEGRA":"#e63946","EAGLES":"#f4d03f","T600":"#a8dadc","TELABA FC":"#06d6a0","THE OG'S":"#ff9f1c"};
+const INITIAL_FIXTURES = [
   {round:1,home:"AC ZEWITA",away:"EAGLES",hg:1,ag:1},
   {round:1,home:"TELABA FC",away:"CASANEGRA",hg:2,ag:1},
   {round:1,home:"THE OG'S",away:"T600",hg:1,ag:0},
@@ -170,23 +189,36 @@ const INITIAL = [
   {round:9,home:"EAGLES",away:"CASANEGRA",hg:null,ag:null},
   {round:10,home:"TELABA FC",away:"AC ZEWITA",hg:null,ag:null},
   {round:10,home:"EAGLES",away:"THE OG'S",hg:null,ag:null},
-  {round:10,home:"CASANEGRA",away:"T600",hg:null,ag:null},
+  {round:10,home:"CASANEGRA",away:"T600",hg:null,ag:null}
 ];
 
-let fixtures = JSON.parse(JSON.stringify(INITIAL));
+let fixtures = [];
 let activeRound = 5;
 
-// ── Storage ───────────────────────────────────────────────────────────────
-function saveData(){
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(fixtures));}catch(e){}
-  const el=document.getElementById('savedMsg');
-  el.style.display='inline';setTimeout(()=>el.style.display='none',1500);
-}
-function loadData(){
-  try{const d=localStorage.getItem(STORAGE_KEY);if(d)fixtures=JSON.parse(d);}catch(e){}
+// 4. NEW CLOUD STORAGE FUNCTIONS
+function saveData() {
+  set(leagueRef, fixtures); // This pushes the data to everyone's PC
+  const el = document.getElementById('savedMsg');
+  el.style.display = 'inline';
+  setTimeout(() => el.style.display = 'none', 1500);
 }
 
-// ── Standings calc ────────────────────────────────────────────────────────
+function loadData() {
+  // onValue is "Magic" - it triggers every time ANYONE changes a score
+  onValue(leagueRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      fixtures = data;
+    } else {
+      fixtures = JSON.parse(JSON.stringify(INITIAL_FIXTURES));
+    }
+    renderAll();
+  });
+}
+
+// --- KEEP ALL YOUR RENDER LOGIC BELOW ---
+// (Copy-pasting the logic from your file so it still works)
+
 function computeStandings(){
   const s={};
   TEAMS.forEach(t=>{s[t]={p:0,w:0,d:0,l:0,gf:0,ga:0};});
@@ -200,7 +232,6 @@ function computeStandings(){
     .sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
 }
 
-// ── Render standings ──────────────────────────────────────────────────────
 function renderStandings(){
   const st=computeStandings();
   const medals=["#c9a84c","#9e9e9e","#a0522d"];
@@ -231,11 +262,10 @@ function renderStandings(){
   document.getElementById('standings-body').innerHTML=html;
 }
 
-// ── Render results ────────────────────────────────────────────────────────
 function renderResults(){
   const played=fixtures.filter(f=>f.hg!==null);
   document.getElementById('results-label').textContent=played.length+' matches played';
-  let html='',lastRound=null;
+  let html='';
   played.forEach(f=>{
     const draw=f.hg===f.ag,hWin=f.hg>f.ag;
     const scoreColor=draw?'#ffd54f':'#fff';
@@ -251,21 +281,18 @@ function renderResults(){
   document.getElementById('results-list').innerHTML=html;
 }
 
-// ── Render fixtures ───────────────────────────────────────────────────────
 function renderFixtures(){
   const rounds=[...new Set(fixtures.map(f=>f.round))];
-  // round buttons
   let btnHtml='';
   rounds.forEach(r=>{
     const rf=fixtures.filter(f=>f.round===r);
     const done=rf.every(f=>f.hg!==null),partial=rf.some(f=>f.hg!==null)&&!done;
     const cls='round-btn'+(r===activeRound?' active':done?' done':partial?' partial':'');
     const lbl=done?' ✓':partial?' …':'';
-    btnHtml+=`<button class="${cls}" onclick="setRound(${r})">R${r}${lbl}</button>`;
+    btnHtml+=`<button class="${cls}" onclick="window.setRound(${r})">R${r}${lbl}</button>`;
   });
   document.getElementById('round-btns').innerHTML=btnHtml;
 
-  // fixture rows
   let html='';
   fixtures.forEach((f,idx)=>{
     if(f.round!==activeRound)return;
@@ -289,11 +316,11 @@ function renderFixtures(){
       <div class="score-inputs">
         <input class="score-input" type="number" min="0" value="${hVal}" placeholder="–"
           style="background:${hBg};border:2px solid ${hBorder};color:${hTxtColor}"
-          oninput="updateScore(${idx},'hg',this.value)" onchange="updateScore(${idx},'hg',this.value)"/>
+          oninput="window.updateScore(${idx},'hg',this.value)"/>
         <span class="vs-dash">–</span>
         <input class="score-input" type="number" min="0" value="${aVal}" placeholder="–"
           style="background:${aBg};border:2px solid ${aBorder};color:${aTxtColor}"
-          oninput="updateScore(${idx},'ag',this.value)" onchange="updateScore(${idx},'ag',this.value)"/>
+          oninput="window.updateScore(${idx},'ag',this.value)"/>
       </div>
       <div class="fixture-team away" style="color:${aColor}">
         ${f.away}
@@ -306,161 +333,29 @@ function renderFixtures(){
 
 function renderAll(){renderStandings();renderResults();renderFixtures();}
 
-function updateScore(idx,field,val){
-  const p=val===''?null:parseInt(val);
-  fixtures[idx][field]=isNaN(p)?null:p;
-  saveData(); renderAll();
-}
-
-function setRound(r){activeRound=r;renderFixtures();}
-
-function switchTab(name,btn){
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('panel-'+name).classList.add('active');
+// 5. ATTACH TO WINDOW (Required because this is a "module" script)
+window.updateScore = (idx, field, val) => {
+  const p = val === '' ? null : parseInt(val);
+  fixtures[idx][field] = isNaN(p) ? null : p;
+  saveData();
+};
+window.setRound = (r) => { activeRound = r; renderFixtures(); };
+window.switchTab = (name, btn) => {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
   btn.classList.add('active');
-}
+};
+window.resetAll = () => {
+  if (!confirm('Reset all results?')) return;
+  fixtures = JSON.parse(JSON.stringify(INITIAL_FIXTURES));
+  saveData();
+};
+window.toggleExportMenu = () => { document.getElementById('exportMenu').classList.toggle('open'); };
 
-function resetAll(){
-  if(!confirm('Reset all results back to the original 4 rounds?'))return;
-  fixtures=JSON.parse(JSON.stringify(INITIAL));
-  saveData();renderAll();
-}
-
-function toggleExportMenu(){
-  document.getElementById('exportMenu').classList.toggle('open');
-}
-document.addEventListener('click',e=>{
-  if(!e.target.closest('.btn-row')) document.getElementById('exportMenu').classList.remove('open');
-});
-
-// ── Canvas helpers ────────────────────────────────────────────────────────
-function rr(ctx,x,y,w,h,r){
-  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
-  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
-  ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
-}
-function h2r(hex,a=1){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;}
-function downloadCanvas(canvas,name){
-  const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download=name+'.png';a.click();
-}
-
-function makeStandingsCanvas(){
-  const st=computeStandings();
-  const W=700,ROW=52,HEADER=130,FOOTER=44,H=HEADER+st.length*ROW+FOOTER;
-  const c=document.createElement('canvas');const dpr=2;c.width=W*dpr;c.height=H*dpr;
-  const ctx=c.getContext('2d');ctx.scale(dpr,dpr);
-  const bg=ctx.createLinearGradient(0,0,W,H);bg.addColorStop(0,'#0d0d2e');bg.addColorStop(1,'#0a0a1a');
-  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='rgba(255,255,255,0.025)';ctx.lineWidth=1;
-  for(let y=0;y<H;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-  const acc=ctx.createLinearGradient(0,0,W,0);acc.addColorStop(0,'#e2b96b');acc.addColorStop(.5,'#f5d98a');acc.addColorStop(1,'#c9a84c');
-  ctx.fillStyle=acc;ctx.fillRect(0,0,W,5);
-  ctx.fillStyle='#e2b96b';ctx.font='bold 30px Georgia,serif';ctx.textAlign='center';ctx.fillText('🏆  LEAGUE STANDINGS',W/2,52);
-  ctx.fillStyle='rgba(226,185,107,0.45)';ctx.font='11px Courier New';ctx.fillText('P  ·  W  ·  D  ·  L  ·  GF  ·  GA  ·  GD  ·  PTS',W/2,74);
-  [{l:'#',x:40},{l:'TEAM',x:85},{l:'P',x:310},{l:'W',x:356},{l:'D',x:400},{l:'L',x:444},{l:'GF',x:492},{l:'GA',x:538},{l:'GD',x:588},{l:'PTS',x:648}]
-    .forEach(col=>{ctx.fillStyle='rgba(226,185,107,0.55)';ctx.font='bold 10px Courier New';ctx.textAlign=col.l==='TEAM'?'left':'center';ctx.fillText(col.l,col.x,102);});
-  ctx.strokeStyle='rgba(226,185,107,0.2)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(20,110);ctx.lineTo(W-20,110);ctx.stroke();
-  const medals=['#c9a84c','#9e9e9e','#a0522d'];
-  st.forEach((t,i)=>{
-    const y=HEADER+i*ROW,pos=i+1,color=TEAM_COLORS[t.name]||'#fff';
-    rr(ctx,18,y+3,W-36,ROW-7,9);ctx.fillStyle=i%2===0?'rgba(255,255,255,0.03)':'rgba(255,255,255,0.015)';ctx.fill();
-    ctx.fillStyle=color;ctx.beginPath();ctx.rect(18,y+3,5,ROW-7);ctx.fill();
-    if(pos<=3){rr(ctx,28,y+11,28,28,7);ctx.fillStyle=medals[pos-1];ctx.fill();ctx.fillStyle=pos===2?'#000':'#fff';}
-    else{rr(ctx,28,y+11,28,28,7);ctx.fillStyle='rgba(255,255,255,0.07)';ctx.fill();ctx.fillStyle='rgba(255,255,255,0.35)';}
-    ctx.font='bold 14px Georgia';ctx.textAlign='center';ctx.fillText(pos,42,y+30);
-    ctx.fillStyle='#fff';ctx.font='bold 14px Trebuchet MS';ctx.textAlign='left';ctx.fillText(t.name,85,y+30);
-    [{v:t.p,x:310,c:'rgba(255,255,255,0.55)'},{v:t.w,x:356,c:'#69f0ae'},{v:t.d,x:400,c:'#ffd54f'},{v:t.l,x:444,c:'#ff6b6b'},
-     {v:t.gf,x:492,c:'rgba(255,255,255,0.65)'},{v:t.ga,x:538,c:'rgba(255,255,255,0.45)'},
-     {v:(t.gd>0?'+':'')+t.gd,x:588,c:t.gd>0?'#69f0ae':t.gd<0?'#ff6b6b':'#777'}]
-    .forEach(({v,x,col})=>{ctx.fillStyle=col||v;});
-    [{v:t.p,x:310,c:'rgba(255,255,255,0.55)'},{v:t.w,x:356,c:'#69f0ae'},{v:t.d,x:400,c:'#ffd54f'},{v:t.l,x:444,c:'#ff6b6b'},
-     {v:t.gf,x:492,c:'rgba(255,255,255,0.65)'},{v:t.ga,x:538,c:'rgba(255,255,255,0.45)'},
-     {v:(t.gd>0?'+':'')+t.gd,x:588,c:t.gd>0?'#69f0ae':t.gd<0?'#ff6b6b':'#777'}]
-    .forEach(s=>{ctx.fillStyle=s.c;ctx.font='13px Courier New';ctx.textAlign='center';ctx.fillText(s.v,s.x,y+30);});
-    rr(ctx,620,y+10,64,30,8);ctx.fillStyle=h2r(color,0.18);ctx.fill();ctx.strokeStyle=h2r(color,0.45);ctx.lineWidth=1.5;ctx.stroke();
-    ctx.fillStyle=color;ctx.font='bold 16px Georgia';ctx.textAlign='center';ctx.fillText(t.pts,652,y+30);
-  });
-  const fy=H-FOOTER+12;ctx.strokeStyle='rgba(226,185,107,0.12)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(20,fy);ctx.lineTo(W-20,fy);ctx.stroke();
-  ctx.fillStyle='rgba(226,185,107,0.3)';ctx.font='10px Courier New';ctx.textAlign='center';ctx.fillText('LEAGUE TRACKER  ·  '+new Date().toLocaleDateString(),W/2,fy+20);
-  return c;
-}
-
-function makeResultsCanvas(){
-  const played=fixtures.filter(f=>f.hg!==null);
-  const W=680,ROW=46,HEADER=88,FOOTER=44;
-  let H=HEADER+FOOTER,lastR=null;
-  played.forEach(f=>{H+=ROW;if(f.round!==lastR){H+=22;lastR=f.round;}});
-  const c=document.createElement('canvas');const dpr=2;c.width=W*dpr;c.height=H*dpr;
-  const ctx=c.getContext('2d');ctx.scale(dpr,dpr);
-  const bg=ctx.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#0d1a0d');bg.addColorStop(1,'#080e08');
-  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-  const acc=ctx.createLinearGradient(0,0,W,0);acc.addColorStop(0,'#69f0ae');acc.addColorStop(1,'#00b4d8');
-  ctx.fillStyle=acc;ctx.fillRect(0,0,W,5);
-  ctx.fillStyle='#69f0ae';ctx.font='bold 28px Georgia,serif';ctx.textAlign='center';ctx.fillText('✅  MATCH RESULTS',W/2,46);
-  ctx.fillStyle='rgba(105,240,174,0.4)';ctx.font='11px Courier New';ctx.fillText(played.length+' matches played',W/2,66);
-  let y=HEADER;lastR=null;
-  played.forEach(f=>{
-    const draw=f.hg===f.ag,hWin=f.hg>f.ag;
-    if(f.round!==lastR){lastR=f.round;ctx.fillStyle='rgba(105,240,174,0.2)';ctx.font='bold 10px Courier New';ctx.textAlign='left';ctx.fillText('— ROUND '+f.round+' —',24,y+15);y+=22;}
-    rr(ctx,16,y+2,W-32,ROW-6,8);ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fill();
-    ctx.fillStyle=hWin?TEAM_COLORS[f.home]:'rgba(255,255,255,0.08)';ctx.beginPath();ctx.rect(16,y+2,5,ROW-6);ctx.fill();
-    ctx.fillStyle=!hWin&&!draw?TEAM_COLORS[f.away]:'rgba(255,255,255,0.08)';ctx.beginPath();ctx.rect(W-21,y+2,5,ROW-6);ctx.fill();
-    ctx.fillStyle=hWin?'#69f0ae':draw?'#ffd54f':'rgba(255,255,255,0.45)';ctx.font=(hWin?'bold ':'')+'13px Trebuchet MS';ctx.textAlign='right';ctx.fillText(f.home,W/2-54,y+25);
-    rr(ctx,W/2-46,y+8,92,ROW-18,7);ctx.fillStyle=draw?'rgba(255,213,79,0.12)':'rgba(255,255,255,0.05)';ctx.fill();ctx.strokeStyle=draw?'rgba(255,213,79,0.35)':'rgba(255,255,255,0.08)';ctx.lineWidth=1;ctx.stroke();
-    ctx.fillStyle=draw?'#ffd54f':'#fff';ctx.font='bold 17px Courier New';ctx.textAlign='center';ctx.fillText(f.hg+'  –  '+f.ag,W/2,y+24);
-    ctx.fillStyle=!hWin&&!draw?'#69f0ae':draw?'#ffd54f':'rgba(255,255,255,0.45)';ctx.font=(!hWin&&!draw?'bold ':'')+'13px Trebuchet MS';ctx.textAlign='left';ctx.fillText(f.away,W/2+54,y+25);
-    y+=ROW;
-  });
-  const fy=H-FOOTER+12;ctx.strokeStyle='rgba(105,240,174,0.12)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(20,fy);ctx.lineTo(W-20,fy);ctx.stroke();
-  ctx.fillStyle='rgba(105,240,174,0.3)';ctx.font='10px Courier New';ctx.textAlign='center';ctx.fillText('LEAGUE TRACKER  ·  '+new Date().toLocaleDateString(),W/2,fy+20);
-  return c;
-}
-
-function makeFixturesCanvas(){
-  const upcoming=fixtures.filter(f=>f.hg===null);
-  const rounds=[...new Set(upcoming.map(f=>f.round))];
-  const W=680,ROW=44,RH=32,HEADER=88,FOOTER=44;
-  let H=HEADER+FOOTER;rounds.forEach(r=>{H+=RH+8+upcoming.filter(f=>f.round===r).length*ROW+10;});
-  const c=document.createElement('canvas');const dpr=2;c.width=W*dpr;c.height=H*dpr;
-  const ctx=c.getContext('2d');ctx.scale(dpr,dpr);
-  const bg=ctx.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#0d0d2a');bg.addColorStop(1,'#080812');
-  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-  const acc=ctx.createLinearGradient(0,0,W,0);acc.addColorStop(0,'#7ec8e3');acc.addColorStop(1,'#a78bfa');
-  ctx.fillStyle=acc;ctx.fillRect(0,0,W,5);
-  ctx.fillStyle='#7ec8e3';ctx.font='bold 28px Georgia,serif';ctx.textAlign='center';ctx.fillText('📅  UPCOMING FIXTURES',W/2,46);
-  ctx.fillStyle='rgba(126,200,227,0.4)';ctx.font='11px Courier New';ctx.fillText(upcoming.length+' matches remaining',W/2,66);
-  let y=HEADER;
-  rounds.forEach(r=>{
-    const rf=upcoming.filter(f=>f.round===r);
-    rr(ctx,16,y,W-32,RH,7);ctx.fillStyle='rgba(126,200,227,0.08)';ctx.fill();ctx.strokeStyle='rgba(126,200,227,0.18)';ctx.lineWidth=1;ctx.stroke();
-    ctx.fillStyle='#7ec8e3';ctx.font='bold 11px Courier New';ctx.textAlign='center';ctx.fillText('— ROUND '+r+' —',W/2,y+20);y+=RH+8;
-    rf.forEach(f=>{
-      rr(ctx,16,y+2,W-32,ROW-6,8);ctx.fillStyle='rgba(126,200,227,0.03)';ctx.fill();ctx.strokeStyle='rgba(126,200,227,0.08)';ctx.lineWidth=1;ctx.stroke();
-      ctx.fillStyle=TEAM_COLORS[f.home]||'#fff';ctx.beginPath();ctx.rect(16,y+2,5,ROW-6);ctx.fill();
-      ctx.fillStyle=TEAM_COLORS[f.away]||'#fff';ctx.beginPath();ctx.rect(W-21,y+2,5,ROW-6);ctx.fill();
-      ctx.fillStyle='#fff';ctx.font='bold 13px Trebuchet MS';ctx.textAlign='right';ctx.fillText(f.home,W/2-52,y+24);
-      rr(ctx,W/2-38,y+9,76,ROW-20,6);ctx.fillStyle='rgba(126,200,227,0.1)';ctx.fill();ctx.strokeStyle='rgba(126,200,227,0.25)';ctx.lineWidth=1;ctx.stroke();
-      ctx.fillStyle='#7ec8e3';ctx.font='bold 12px Courier New';ctx.textAlign='center';ctx.fillText('VS',W/2,y+23);
-      ctx.fillStyle='#fff';ctx.font='bold 13px Trebuchet MS';ctx.textAlign='left';ctx.fillText(f.away,W/2+52,y+24);
-      y+=ROW;
-    });y+=10;
-  });
-  const fy=H-FOOTER+12;ctx.strokeStyle='rgba(126,200,227,0.12)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(20,fy);ctx.lineTo(W-20,fy);ctx.stroke();
-  ctx.fillStyle='rgba(126,200,227,0.3)';ctx.font='10px Courier New';ctx.textAlign='center';ctx.fillText('LEAGUE TRACKER  ·  '+new Date().toLocaleDateString(),W/2,fy+20);
-  return c;
-}
-
-function doExport(type){
-  document.getElementById('exportMenu').classList.remove('open');
-  if(type==='standings'||type==='all') downloadCanvas(makeStandingsCanvas(),'standings');
-  if(type==='results'||type==='all')   setTimeout(()=>downloadCanvas(makeResultsCanvas(),'results'),type==='all'?200:0);
-  if(type==='fixtures'||type==='all')  setTimeout(()=>downloadCanvas(makeFixturesCanvas(),'fixtures'),type==='all'?400:0);
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────
+// Initialize
 loadData();
-renderAll();
+</script>
 </script>
 </body>
 </html>
